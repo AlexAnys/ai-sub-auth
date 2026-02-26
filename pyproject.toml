@@ -1,0 +1,29 @@
+[project]
+name = "ai-sub-auth"
+version = "0.1.0"
+description = "Reuse your AI subscriptions. One module, every provider."
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "AlexAnys" }]
+keywords = ["ai", "oauth", "llm", "chatgpt", "codex", "claude", "gemini", "copilot", "subscription", "authentication"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Security",
+]
+dependencies = [
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+copilot = ["litellm>=1.50"]
+
+[project.urls]
+Homepage = "https://github.com/AlexAnys/ai-sub-auth"
+Repository = "https://github.com/AlexAnys/ai-sub-auth"
+Issues = "https://github.com/AlexAnys/ai-sub-auth/issues"
