@@ -187,8 +187,52 @@ ai_sub_auth/
 ├── providers.py      # Provider 注册表（Codex, Claude, Gemini 等）
 ├── oauth_flow.py     # OAuth PKCE 流程 + Token 刷新
 ├── token_store.py    # 安全的文件级 Token 存储
-└── api_client.py     # 统一的 LLMClient
+├── api_client.py     # 统一的 LLMClient
+└── skills.py         # Meta Skill 框架（8 技能 + 3-Suggestion 协议）
 ```
+
+## Agent Skills — AI 集成框架
+
+> **给 AI Agent**: 完整集成指南见 [`AGENT.md`](./AGENT.md)
+
+本模块包含一个 **Meta Skill 框架**，帮助 AI Agent（Claude Code、OpenClaw、Cursor 等）自动发现如何将 AI 功能集成到任意应用中。
+
+### 8 个 Meta Skill
+
+任何有用的 AI 功能都是这 8 个基础能力的组合：
+
+```
+SUMMARIZE    多 → 少            压缩内容，保留核心含义
+GENERATE     少 → 多            从意图或规范生成新内容
+ANALYZE      原始 → 洞察        发现数据中的模式、异常、趋势
+TRANSFORM    形式A → 形式B      在格式、风格、语言之间转换
+CLASSIFY     条目 → 分类        分配类别、优先级或标签
+EVALUATE     内容 → 评分        根据标准判断质量
+CONVERSE     用户 ↔ AI          多轮上下文对话
+EXTRACT      噪声 → 信号        从非结构化输入提取结构化数据
+```
+
+### 3-Suggestion 协议
+
+当 Agent 遇到任何应用时，遵循：**扫描 → 匹配 → 排序 → 呈现 → 实施**
+
+```python
+from ai_sub_auth import AppProfile, suggest_for_app
+
+profile = AppProfile(
+    domain="笔记应用",
+    verbs=["创建笔记", "搜索", "打标签", "双链"],
+    nouns=["笔记", "标签", "文件夹", "反向链接"],
+    roles=["用户"],
+    existing_ai=[],
+)
+
+suggestions = suggest_for_app(profile)
+for s in suggestions:
+    print(f"{s.skill.name}: {s.reason} [{s.effort}]")
+```
+
+输出恰好 3 条多样化、排序后的建议——至少一个快速见效的，至少一个有高上限的。完整协议和实现模式见 [`AGENT.md`](./AGENT.md)。
 
 ## 致谢
 

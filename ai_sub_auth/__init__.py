@@ -13,6 +13,7 @@ from ai_sub_auth.token_store import TokenStore
 from ai_sub_auth.oauth_flow import oauth_login, get_or_refresh_token
 from ai_sub_auth.providers import PROVIDERS, get_provider, find_provider_by_model
 from ai_sub_auth.api_client import LLMClient
+from ai_sub_auth.skills import META_SKILLS, AppProfile, Suggestion, Skill, suggest_for_app
 
 __version__ = "0.1.0"
 
@@ -23,4 +24,5 @@ __all__ = [
     "oauth_login", "get_or_refresh_token",
     "PROVIDERS", "get_provider", "find_provider_by_model",
     "LLMClient",
+    "META_SKILLS", "AppProfile", "Suggestion", "Skill", "suggest_for_app",
 ]

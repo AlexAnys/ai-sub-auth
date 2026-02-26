@@ -187,8 +187,52 @@ ai_sub_auth/
 ├── providers.py      # Provider registry (Codex, Claude, Gemini, etc.)
 ├── oauth_flow.py     # OAuth PKCE flow + token refresh
 ├── token_store.py    # Secure file-based token storage
-└── api_client.py     # Unified LLMClient
+├── api_client.py     # Unified LLMClient
+└── skills.py         # Meta Skill Framework (8 skills + 3-Suggestion Protocol)
 ```
+
+## Agent Skills — AI Integration Framework
+
+> **For AI Agents**: See [`AGENT.md`](./AGENT.md) for the full integration guide.
+
+This module includes a **Meta Skill Framework** that helps AI agents (Claude Code, OpenClaw, Cursor, etc.) automatically discover how to integrate AI features into any application.
+
+### 8 Meta Skills
+
+Every useful AI feature is a composition of exactly 8 universal skills:
+
+```
+SUMMARIZE    many → few         Reduce volume, preserve meaning
+GENERATE     few → many         Produce new content from intent
+ANALYZE      raw → insight      Find patterns in data
+TRANSFORM    form A → form B    Convert between formats/styles
+CLASSIFY     items → buckets    Assign categories or priorities
+EVALUATE     content → score    Judge quality against criteria
+CONVERSE     user ↔ AI          Multi-turn contextual dialogue
+EXTRACT      noise → signal     Pull structure from chaos
+```
+
+### 3-Suggestion Protocol
+
+When an agent encounters any app, it follows: **SCAN → MATCH → RANK → PRESENT → IMPLEMENT**
+
+```python
+from ai_sub_auth import AppProfile, suggest_for_app
+
+profile = AppProfile(
+    domain="note-taking",
+    verbs=["create notes", "search", "tag", "link"],
+    nouns=["notes", "tags", "folders", "backlinks"],
+    roles=["user"],
+    existing_ai=[],
+)
+
+suggestions = suggest_for_app(profile)
+for s in suggestions:
+    print(f"{s.skill.name}: {s.reason} [{s.effort}]")
+```
+
+This produces exactly 3 diverse, ranked suggestions — at least one quick win, at least one high-ceiling opportunity. See [`AGENT.md`](./AGENT.md) for the complete protocol and implementation patterns.
 
 ## Credits
 
