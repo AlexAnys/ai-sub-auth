@@ -1,12 +1,27 @@
 # ai-sub-auth
 
-**Reuse your AI subscriptions. One module, every provider.**
+**Reuse your AI subscriptions. One module, every provider. Let AI agents find the best features for your app.**
 
 English | [中文](./README_CN.md)
 
 You're already paying $20–200/month for ChatGPT Plus, Claude Pro, GitHub Copilot, or Gemini Advanced. Why pay again for API access when building your own apps?
 
-`ai-sub-auth` is a lightweight Python module (~500 lines, only depends on `httpx`) that authenticates against AI providers using your existing subscriptions — no proxy servers, no middleware, no bloat.
+`ai-sub-auth` is a lightweight Python module (~500 lines, only depends on `httpx`) that authenticates against AI providers using your existing subscriptions — no proxy servers, no middleware, no bloat. It also includes a **Meta Skill Framework** that enables any AI agent to automatically scan your application, identify where AI adds the most value, and suggest the top 3 features to integrate.
+
+## Table of Contents
+
+- [The Problem](#the-problem)
+- [The Solution](#the-solution)
+- [Supported Providers](#supported-providers)
+- [Quick Start](#quick-start)
+- [How It Works](#how-it-works)
+- [Comparison with Alternatives](#comparison-with-alternatives)
+- [Adding a Custom Provider](#adding-a-custom-provider)
+- [Security](#security)
+- [Project Structure](#project-structure)
+- [Agent Skills — AI Integration Framework](#agent-skills--ai-integration-framework)
+- [Credits](#credits)
+- [License](#license)
 
 ## The Problem
 

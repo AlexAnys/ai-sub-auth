@@ -1,12 +1,27 @@
 # ai-sub-auth
 
-**复用你的 AI 订阅。一个模块，接入所有 Provider。**
+**复用你的 AI 订阅。一个模块，接入所有 Provider。让 AI Agent 为你的应用自动发现最佳功能。**
 
 [English](./README.md) | 中文
 
 你已经在为 ChatGPT Plus、Claude Pro、GitHub Copilot 或 Gemini Advanced 每月支付 $20–200。为什么在开发自己的应用时还要再付一笔 API 费用？
 
-`ai-sub-auth` 是一个轻量 Python 模块（约 500 行代码，仅依赖 `httpx`），让你用现有的 AI 订阅直接认证——不需要代理服务器，不需要中间件，零冗余。
+`ai-sub-auth` 是一个轻量 Python 模块（约 500 行代码，仅依赖 `httpx`），让你用现有的 AI 订阅直接认证——不需要代理服务器，不需要中间件，零冗余。它还内置了一套 **Meta Skill 框架**，让任何 AI Agent 都能自动扫描你的应用、识别 AI 能带来最大价值的环节、并主动建议最值得集成的 3 个功能。
+
+## 目录
+
+- [痛点](#痛点)
+- [解决方案](#解决方案)
+- [支持的 Provider](#支持的-provider)
+- [快速开始](#快速开始)
+- [工作原理](#工作原理)
+- [与其他方案对比](#与其他方案对比)
+- [添加自定义 Provider](#添加自定义-provider)
+- [安全性](#安全性)
+- [项目结构](#项目结构)
+- [Agent Skills — AI 集成框架](#agent-skills--ai-集成框架)
+- [致谢](#致谢)
+- [许可证](#许可证)
 
 ## 痛点
 
