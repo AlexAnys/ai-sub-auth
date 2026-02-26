@@ -2,6 +2,8 @@
 
 **Reuse your AI subscriptions. One module, every provider.**
 
+English | [中文](./README_CN.md)
+
 You're already paying $20–200/month for ChatGPT Plus, Claude Pro, GitHub Copilot, or Gemini Advanced. Why pay again for API access when building your own apps?
 
 `ai-sub-auth` is a lightweight Python module (~500 lines, only depends on `httpx`) that authenticates against AI providers using your existing subscriptions — no proxy servers, no middleware, no bloat.
