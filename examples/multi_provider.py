@@ -21,7 +21,7 @@ async def main():
     question = "What is 2 + 2? Answer in one word."
 
     # Auto-routes to correct provider based on model name
-    await ask("openai-codex/gpt-4o", question)                          # → OpenAI Codex (OAuth)
+    await ask("openai-codex/codex-mini-latest", question)                 # → OpenAI Codex (OAuth)
     await ask("claude-sonnet-4-5-20250514", question, "sk-ant-...")      # → Anthropic (API Key)
     await ask("gpt-4o", question, "sk-...")                              # → OpenAI (API Key)
     await ask("gemini-2.0-flash", question, "AI...")                     # → Google Gemini

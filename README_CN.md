@@ -1,18 +1,21 @@
 # ai-sub-auth
 
-**复用你的 AI 订阅。一个模块，接入所有 Provider。让 AI Agent 为你的应用自动发现最佳功能。**
+**复用你的 AI 订阅。一个模块，接入所有 Provider。AI Agent 的代码 + 知识参考。**
 
 [English](./README.md) | 中文
 
-你已经在为 ChatGPT Plus、Claude Pro、GitHub Copilot 或 Gemini Advanced 每月支付 $20–200。为什么在开发自己的应用时还要再付一笔 API 费用？
+你已经在为 ChatGPT Plus 每月支付 $20。为什么在开发自己的应用时还要再付一笔 API 费用？
 
-`ai-sub-auth` 是一个轻量 Python 模块（约 500 行代码，仅依赖 `httpx`），让你用现有的 AI 订阅直接认证——不需要代理服务器，不需要中间件，零冗余。它还内置了一套 **Meta Skill 框架**，让任何 AI Agent 都能自动扫描你的应用、识别 AI 能带来最大价值的环节、并主动建议最值得集成的 3 个功能。
+`ai-sub-auth` 是一个轻量 Python 模块（约 600 行代码，仅依赖 `httpx`），能将你现有的 AI 订阅桥接到任何应用中——不需要代理服务器，不需要中间件，零冗余。它有两个用途：
+
+1. **给开发者** — 开箱即用的 AI 订阅认证，支持自动检测、OAuth PKCE、Token 管理，以及跨 7 个 Provider 的统一 API。
+2. **给 AI Agent** — 一套代码 + 知识参考（包含 [`AGENT.md`](./AGENT.md) 和 **Meta Skill 框架**），教会 Agent 如何将 AI 能力集成到任意应用中。
 
 ## 目录
 
 - [痛点](#痛点)
 - [解决方案](#解决方案)
-- [支持的 Provider](#支持的-provider)
+- [订阅现实 (2026)](#订阅现实-2026)
 - [快速开始](#快速开始)
 - [工作原理](#工作原理)
 - [与其他方案对比](#与其他方案对比)
@@ -38,6 +41,30 @@
 pip install httpx  # 唯一依赖
 ```
 
+### 推荐：AI Facade（自动检测你的订阅）
+
+```python
+from ai_sub_auth import AI
+
+ai = AI()           # 自动检测：ChatGPT Plus OAuth token → 环境变量中的 API key
+ai.connect()        # OAuth 登录或 API key 验证
+
+# 异步
+result = await ai.chat("帮我总结这份会议记录", system="简洁回答。")
+
+# 同步（适用于任何场景——FastAPI、Jupyter、脚本）
+result = ai.chat_sync("帮我总结这份会议记录")
+
+# 多轮对话
+result = await ai.chat(messages=[
+    {"role": "user", "content": "量子计算是什么？"},
+    {"role": "assistant", "content": "量子计算利用..."},
+    {"role": "user", "content": "它和经典计算有什么区别？"},
+])
+```
+
+### 直接使用 LLMClient（显式 Provider 控制）
+
 ```python
 from ai_sub_auth import LLMClient, oauth_login, PROVIDERS
 
@@ -50,58 +77,73 @@ resp = await client.chat("帮我总结这份会议记录")
 print(resp.content)
 ```
 
-就这样。Token 刷新、安全存储、PKCE——全部自动处理。
+Token 刷新、安全存储、PKCE——全部自动处理。
 
-## 支持的 Provider
+## 订阅现实 (2026)
 
-| Provider | 认证方式 | 使用的订阅 | 状态 |
-|----------|----------|-----------|------|
-| **OpenAI Codex** | OAuth PKCE | ChatGPT Plus/Pro | ✅ 可用 |
-| **Claude** | API Key | 按量计费 | ✅ 可用 |
-| **OpenAI** | API Key | 按量计费 | ✅ 可用 |
-| **GitHub Copilot** | Device Code | Copilot 订阅 | ✅ 可用（通过 LiteLLM） |
-| **Google Gemini** | API Key | 按量计费 | ✅ 可用 |
-| **DeepSeek** | API Key | 按量计费 | ✅ 可用 |
-| **OpenRouter** | API Key | 一个 key 用所有模型 | ✅ 可用 |
+并非所有 AI 订阅都能桥接到第三方应用。以下是实际情况：
 
-> **关于 Claude：** Anthropic 在 2026 年 1 月封禁了第三方工具使用 OAuth token。Claude 通过标准 API Key 接入，多一步去 console.anthropic.com 获取 key，但运行稳定。
+| Provider | 认证方式 | 能否桥接订阅？ | 说明 |
+|----------|----------|---------------|------|
+| **OpenAI ChatGPT Plus/Pro** | OAuth PKCE | ✅ 可以——零额外成本 | OpenAI 通过 Codex SDK 积极支持 |
+| **Claude** | API Key | ❌ 仅 API key（按量计费） | Anthropic 于 2026 年 2 月封禁了订阅 OAuth |
+| **OpenAI** | API Key | ❌ 仅 API key（按量计费） | 与 ChatGPT 订阅独立 |
+| **GitHub Copilot** | Device Code | ⚠️ 可用但违反 ToS | 不推荐在生产环境使用 |
+| **Google Gemini** | API Key | ❌ 仅 API key（按量计费） | Google 会永久封禁滥用 OAuth 的账号 |
+| **DeepSeek** | API Key | ❌ 仅 API key（按量计费） | 标准 API key 认证 |
+| **OpenRouter** | API Key | ❌ 仅 API key（按量计费） | 一个 key 用所有模型 |
+
+**核心洞察：** OpenAI Codex OAuth 是唯一能让用户在第三方应用中复用现有订阅（$20/月 ChatGPT Plus）且零额外成本的路径。其他 Provider 都需要独立的 API key，按量计费。
+
+> **反面模式：** 不要尝试通过 OAuth 桥接 Claude Pro/Max 或 Google Gemini 订阅。Anthropic 会直接封禁；Google 会永久封禁用户账号。
 
 ## 快速开始
 
-### 1. OpenAI Codex — 直接用你的 ChatGPT 订阅
+### 1. AI Facade — 自动检测（推荐）
+
+```python
+from ai_sub_auth import AI
+
+# 自动检测：已有 OAuth token → 环境变量中的 API key
+ai = AI()
+ai.connect()
+
+# 同步用法（最简单）
+result = ai.chat_sync("量子计算是什么？", system="简洁回答。")
+print(result.content)
+
+# 查看订阅状态
+print(ai.status)  # SubscriptionStatus(connected=True, provider_name='OpenAI Codex', ...)
+```
+
+### 2. OpenAI Codex — 直接用你的 ChatGPT 订阅
 
 ```python
 import asyncio
-from ai_sub_auth import LLMClient, oauth_login, PROVIDERS
+from ai_sub_auth import AI
 
-# 首次：浏览器打开，登录，搞定
-oauth_login(PROVIDERS["openai_codex"])
+ai = AI(provider="openai_codex")
+ai.connect()  # 首次：浏览器打开进行 OAuth 登录。之后：全自动。
 
-# 之后每次：全自动
 async def main():
-    client = LLMClient(PROVIDERS["openai_codex"], model="openai-codex/gpt-5.1-codex")
-    resp = await client.chat("量子计算是什么？", system="简洁回答。")
+    resp = await ai.chat("量子计算是什么？", system="简洁回答。")
     print(resp.content)
 
 asyncio.run(main())
 ```
 
-### 2. Claude — API Key
+### 3. Claude — API Key
 
 ```python
-import asyncio
-from ai_sub_auth import LLMClient, PROVIDERS
+from ai_sub_auth import AI
 
-async def main():
-    client = LLMClient(PROVIDERS["anthropic"], api_key="sk-ant-...", model="claude-sonnet-4-5-20250514")
-    resp = await client.chat("用三句话解释 Transformer")
-    print(resp.content)
-    print(f"Token 用量: {resp.usage}")
-
-asyncio.run(main())
+ai = AI(api_key="sk-ant-...")  # 从 key 前缀自动识别 Anthropic
+result = ai.chat_sync("用三句话解释 Transformer")
+print(result.content)
+print(f"Token 用量: {result.usage}")
 ```
 
-### 3. Google Gemini
+### 4. Google Gemini
 
 ```python
 import asyncio
@@ -115,7 +157,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### 4. OpenRouter — 一个 Key 访问所有模型
+### 5. OpenRouter — 一个 Key 访问所有模型
 
 ```python
 import asyncio
@@ -197,6 +239,7 @@ client = LLMClient(my_provider, api_key="...", model="my-model-v1")
 ```
 ai_sub_auth/
 ├── __init__.py       # 公开 API
+├── facade.py         # AI Facade — 自动检测、连接、对话（推荐入口）
 ├── models.py         # OAuthToken, ProviderConfig, AuthMethod, LLMResponse
 ├── exceptions.py     # AuthError, TokenExpiredError, ProviderNotFoundError
 ├── providers.py      # Provider 注册表（Codex, Claude, Gemini 等）

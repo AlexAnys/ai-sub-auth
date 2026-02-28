@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from pathlib import Path
 
 from ai_sub_auth.models import OAuthToken
@@ -39,7 +40,10 @@ class TokenStore:
                 expires=int(data["expires"]),
                 account_id=data.get("account_id"),
             )
-        except Exception:
+        except (json.JSONDecodeError, KeyError):
+            return None
+        except Exception as exc:
+            warnings.warn(f"Unexpected error loading token: {exc}")
             return None
 
     def save(self, token: OAuthToken) -> None:
@@ -54,7 +58,7 @@ class TokenStore:
         except OSError:
             pass  # Windows or permission issue — non-fatal
 
-    def locked(self):
+    def locked(self) -> _FileLock:
         """File lock context manager to prevent concurrent token refreshes."""
         return _FileLock(self._path.with_suffix(".lock"))
 
@@ -64,7 +68,6 @@ class TokenStore:
         This allows reusing tokens if the user has already logged in
         via the official Codex CLI — same pattern as oauth-cli-kit.
         """
-        import time
         codex_path = Path.home() / ".codex" / "auth.json"
         if not codex_path.exists():
             return None
@@ -82,7 +85,10 @@ class TokenStore:
                                expires=expires, account_id=str(account_id) if account_id else None)
             self.save(token)
             return token
-        except Exception:
+        except (json.JSONDecodeError, KeyError, OSError):
+            return None
+        except Exception as exc:
+            warnings.warn(f"Unexpected error importing Codex CLI tokens: {exc}")
             return None
 
 
@@ -108,9 +114,9 @@ class _FileLock:
                 import msvcrt
                 msvcrt.locking(self._fp.fileno(), msvcrt.LK_LOCK, 1)
             except Exception:
-                pass
+                warnings.warn("File locking not available on this platform")
         except Exception:
-            pass
+            warnings.warn("File locking not available — concurrent access may cause issues")
         return self
 
     def __exit__(self, *_):
@@ -122,8 +128,8 @@ class _FileLock:
                 import msvcrt
                 msvcrt.locking(self._fp.fileno(), msvcrt.LK_UNLCK, 1)
             except Exception:
-                pass
+                warnings.warn("File unlock not available on this platform")
         except Exception:
-            pass
+            warnings.warn("File unlock failed — lock file may be stale")
         if self._fp:
             self._fp.close()

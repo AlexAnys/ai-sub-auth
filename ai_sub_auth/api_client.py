@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from typing import Any
 
 import httpx
@@ -38,6 +39,12 @@ class LLMClient:
         self.api_key = api_key or os.environ.get(provider.env_key, "")
         self.model = model
 
+        if provider.auth_method == AuthMethod.API_KEY and not self.api_key:
+            raise AuthError(
+                f"API key required for {provider.display_name}. "
+                f"Pass api_key= or set {provider.env_key}."
+            )
+
     def _get_auth_headers(self) -> dict[str, str]:
         """Build auth headers based on provider type."""
         if self.provider.auth_method == AuthMethod.OAUTH_PKCE:
@@ -61,14 +68,23 @@ class LLMClient:
 
     async def chat(
         self,
-        message: str,
+        message: str = "",
         system: str = "",
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.7,
+        messages: list[dict[str, str]] | None = None,
     ) -> LLMResponse:
-        """Send a chat request, auto-routed to the correct provider API."""
+        """Send a chat request, auto-routed to the correct provider API.
+
+        Args:
+            message: Single user message string (simple mode).
+            messages: Multi-turn conversation as list of {"role": ..., "content": ...}.
+                      If provided, takes precedence over `message`.
+        """
         model = model or self.model
+        if not model:
+            raise AuthError("Model is required — pass model to LLMClient() or chat()")
 
         dispatch = {
             "openai_codex": self._chat_codex,
@@ -76,11 +92,14 @@ class LLMClient:
             "google_gemini": self._chat_gemini,
         }
         handler = dispatch.get(self.provider.name, self._chat_openai_compat)
-        return await handler(message, system, model, max_tokens, temperature)
+        return await handler(message, system, model, max_tokens, temperature, messages)
 
     # ── OpenAI Codex (Responses API, SSE) ──
 
-    async def _chat_codex(self, message, system, model, max_tokens, temperature) -> LLMResponse:
+    async def _chat_codex(
+        self, message: str, system: str, model: str, max_tokens: int, temperature: float,
+        messages: list[dict[str, str]] | None = None,
+    ) -> LLMResponse:
         """Codex Responses API — from nanobot/providers/openai_codex_provider.py."""
         headers = self._get_auth_headers()
         headers.update({
@@ -91,13 +110,20 @@ class LLMClient:
             "content-type": "application/json",
         })
 
-        bare_model = model.split("/", 1)[-1] if model and "/" in model else (model or "gpt-5.1-codex")
+        bare_model = model.split("/", 1)[-1] if "/" in model else model
+        if messages:
+            input_items = [
+                {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]}
+                for m in messages
+            ]
+        else:
+            input_items = [{"role": "user", "content": [{"type": "input_text", "text": message}]}]
         body = {
             "model": bare_model,
             "store": False,
             "stream": True,
             "instructions": system,
-            "input": [{"role": "user", "content": [{"type": "input_text", "text": message}]}],
+            "input": input_items,
             "text": {"verbosity": "medium"},
         }
 
@@ -108,7 +134,7 @@ class LLMClient:
                     raise AuthError(f"Codex API error {resp.status_code}: {text.decode()}")
                 return await self._consume_codex_sse(resp)
 
-    async def _consume_codex_sse(self, response) -> LLMResponse:
+    async def _consume_codex_sse(self, response: httpx.Response) -> LLMResponse:
         """Parse Codex SSE stream."""
         content = ""
         async for line in response.aiter_lines():
@@ -119,7 +145,8 @@ class LLMClient:
                 continue
             try:
                 event = json.loads(data)
-            except Exception:
+            except json.JSONDecodeError:
+                warnings.warn(f"Skipping malformed SSE JSON: {data[:100]}")
                 continue
             if event.get("type") == "response.output_text.delta":
                 content += event.get("delta", "")
@@ -127,14 +154,17 @@ class LLMClient:
 
     # ── Anthropic Messages API ──
 
-    async def _chat_anthropic(self, message, system, model, max_tokens, temperature) -> LLMResponse:
+    async def _chat_anthropic(
+        self, message: str, system: str, model: str, max_tokens: int, temperature: float,
+        messages: list[dict[str, str]] | None = None,
+    ) -> LLMResponse:
         headers = self._get_auth_headers()
         headers["content-type"] = "application/json"
         body: dict[str, Any] = {
-            "model": model or "claude-sonnet-4-5-20250514",
+            "model": model,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "messages": [{"role": "user", "content": message}],
+            "messages": messages if messages else [{"role": "user", "content": message}],
         }
         if system:
             body["system"] = system
@@ -157,23 +187,31 @@ class LLMClient:
 
     # ── Google Gemini API ──
 
-    async def _chat_gemini(self, message, system, model, max_tokens, temperature) -> LLMResponse:
-        model = model or "gemini-2.0-flash"
+    async def _chat_gemini(
+        self, message: str, system: str, model: str, max_tokens: int, temperature: float,
+        messages: list[dict[str, str]] | None = None,
+    ) -> LLMResponse:
         url = f"{self.provider.api_base}/models/{model}:generateContent?key={self.api_key}"
 
-        contents = []
-        if system:
-            contents.append({"role": "user", "parts": [{"text": system}]})
-            contents.append({"role": "model", "parts": [{"text": "Understood."}]})
-        contents.append({"role": "user", "parts": [{"text": message}]})
+        if messages:
+            # Gemini uses "model" instead of "assistant" for role
+            contents = [
+                {"role": "model" if m["role"] == "assistant" else m["role"],
+                 "parts": [{"text": m["content"]}]}
+                for m in messages
+            ]
+        else:
+            contents = [{"role": "user", "parts": [{"text": message}]}]
 
-        body = {
+        body: dict[str, Any] = {
             "contents": contents,
             "generationConfig": {
                 "maxOutputTokens": max_tokens,
                 "temperature": temperature,
             },
         }
+        if system:
+            body["system_instruction"] = {"parts": [{"text": system}]}
 
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(url, json=body, headers={"content-type": "application/json"})
@@ -182,34 +220,44 @@ class LLMClient:
             raise AuthError(f"Gemini API error {resp.status_code}: {resp.text}")
 
         data = resp.json()
-        candidates = data.get("candidates", [{}])
-        text = ""
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            text = "".join(p.get("text", "") for p in parts)
+        candidates = data.get("candidates", [])
+        if not candidates or "content" not in candidates[0]:
+            raise AuthError(
+                f"Gemini returned no candidates: {data.get('promptFeedback', 'unknown reason')}"
+            )
+        parts = candidates[0]["content"].get("parts", [])
+        text = "".join(p.get("text", "") for p in parts)
         usage = data.get("usageMetadata", {})
         return LLMResponse(
             content=text,
-            finish_reason=candidates[0].get("finishReason", "STOP") if candidates else "STOP",
+            finish_reason=candidates[0].get("finishReason", "STOP"),
             usage={"input": usage.get("promptTokenCount", 0), "output": usage.get("candidatesTokenCount", 0)},
             raw=data,
         )
 
     # ── OpenAI-Compatible API (OpenAI, DeepSeek, OpenRouter...) ──
 
-    async def _chat_openai_compat(self, message, system, model, max_tokens, temperature) -> LLMResponse:
+    async def _chat_openai_compat(
+        self, message: str, system: str, model: str, max_tokens: int, temperature: float,
+        messages: list[dict[str, str]] | None = None,
+    ) -> LLMResponse:
         headers = self._get_auth_headers()
         headers["content-type"] = "application/json"
-        messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": message})
+        if messages:
+            chat_messages = list(messages)
+            if system and not any(m["role"] == "system" for m in chat_messages):
+                chat_messages.insert(0, {"role": "system", "content": system})
+        else:
+            chat_messages = []
+            if system:
+                chat_messages.append({"role": "system", "content": system})
+            chat_messages.append({"role": "user", "content": message})
 
         body = {
-            "model": model or "gpt-4o",
+            "model": model,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "messages": messages,
+            "messages": chat_messages,
         }
 
         base = self.provider.api_base.rstrip("/")

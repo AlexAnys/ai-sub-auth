@@ -1,18 +1,21 @@
 # ai-sub-auth
 
-**Reuse your AI subscriptions. One module, every provider. Let AI agents find the best features for your app.**
+**Reuse your AI subscriptions. One module, every provider. Code + knowledge reference for AI agents.**
 
 English | [中文](./README_CN.md)
 
-You're already paying $20–200/month for ChatGPT Plus, Claude Pro, GitHub Copilot, or Gemini Advanced. Why pay again for API access when building your own apps?
+You're already paying $20/month for ChatGPT Plus. Why pay again for API access when building your own apps?
 
-`ai-sub-auth` is a lightweight Python module (~500 lines, only depends on `httpx`) that authenticates against AI providers using your existing subscriptions — no proxy servers, no middleware, no bloat. It also includes a **Meta Skill Framework** that enables any AI agent to automatically scan your application, identify where AI adds the most value, and suggest the top 3 features to integrate.
+`ai-sub-auth` is a lightweight Python module (~600 lines, only depends on `httpx`) that bridges your existing AI subscriptions into any application — no proxy servers, no middleware, no bloat. It serves two purposes:
+
+1. **For developers** — Drop-in AI subscription auth with auto-detection, OAuth PKCE, token management, and a unified API across 7 providers.
+2. **For AI agents** — A code + knowledge reference (with [`AGENT.md`](./AGENT.md) and a **Meta Skill Framework**) that teaches agents how to integrate AI capabilities into any application.
 
 ## Table of Contents
 
 - [The Problem](#the-problem)
 - [The Solution](#the-solution)
-- [Supported Providers](#supported-providers)
+- [Subscription Reality (2026)](#subscription-reality-2026)
 - [Quick Start](#quick-start)
 - [How It Works](#how-it-works)
 - [Comparison with Alternatives](#comparison-with-alternatives)
@@ -38,6 +41,30 @@ You're already paying $20–200/month for ChatGPT Plus, Claude Pro, GitHub Copil
 pip install httpx  # only dependency
 ```
 
+### Recommended: AI Facade (auto-detects your subscription)
+
+```python
+from ai_sub_auth import AI
+
+ai = AI()           # auto-detects ChatGPT Plus OAuth token or API key env vars
+ai.connect()        # OAuth login or API key verification
+
+# Async
+result = await ai.chat("Summarize this meeting transcript", system="Be concise.")
+
+# Sync (safe in any context — FastAPI, Jupyter, scripts)
+result = ai.chat_sync("Summarize this meeting transcript")
+
+# Multi-turn conversation
+result = await ai.chat(messages=[
+    {"role": "user", "content": "What is quantum computing?"},
+    {"role": "assistant", "content": "Quantum computing uses..."},
+    {"role": "user", "content": "How does it differ from classical?"},
+])
+```
+
+### Direct LLMClient (explicit provider control)
+
 ```python
 from ai_sub_auth import LLMClient, oauth_login, PROVIDERS
 
@@ -50,58 +77,73 @@ resp = await client.chat("Summarize this meeting transcript")
 print(resp.content)
 ```
 
-That's it. Token refresh, secure storage, PKCE — all handled automatically.
+Token refresh, secure storage, PKCE — all handled automatically.
 
-## Supported Providers
+## Subscription Reality (2026)
 
-| Provider | Auth Method | Subscription Used | Status |
-|----------|-------------|-------------------|--------|
-| **OpenAI Codex** | OAuth PKCE | ChatGPT Plus/Pro | ✅ Working |
-| **Claude** | API Key | Pay-per-token | ✅ Working |
-| **OpenAI** | API Key | Pay-per-token | ✅ Working |
-| **GitHub Copilot** | Device Code | Copilot subscription | ✅ Working (via LiteLLM) |
-| **Google Gemini** | API Key | Pay-per-token | ✅ Working |
-| **DeepSeek** | API Key | Pay-per-token | ✅ Working |
-| **OpenRouter** | API Key | One key, all models | ✅ Working |
+Not all AI subscriptions can be bridged into third-party apps. Here's what actually works:
 
-> **Note on Claude:** Anthropic blocked third-party OAuth token usage in January 2026. Claude is supported via standard API keys. This adds one extra step (getting a key from console.anthropic.com) but works reliably.
+| Provider | Method | Can Bridge Subscription? | Notes |
+|----------|--------|--------------------------|-------|
+| **OpenAI ChatGPT Plus/Pro** | OAuth PKCE | ✅ Yes — zero extra cost | OpenAI actively supports this via Codex SDK |
+| **Claude** | API Key | ❌ API key only (pay-per-token) | Anthropic banned subscription OAuth (Feb 2026) |
+| **OpenAI** | API Key | ❌ API key only (pay-per-token) | Separate from ChatGPT subscription |
+| **GitHub Copilot** | Device Code | ⚠️ Works but violates ToS | Not recommended for production |
+| **Google Gemini** | API Key | ❌ API key only (pay-per-token) | Google permanently bans accounts for OAuth abuse |
+| **DeepSeek** | API Key | ❌ API key only (pay-per-token) | Standard API key auth |
+| **OpenRouter** | API Key | ❌ API key only (pay-per-token) | One key, all models |
+
+**Key insight:** OpenAI Codex OAuth is the only path where users can reuse their existing subscription ($20/mo ChatGPT Plus) in third-party apps at zero additional cost. All other providers require separate API keys with pay-per-token billing.
+
+> **Anti-patterns:** Do NOT attempt to bridge Claude Pro/Max or Google Gemini subscriptions via OAuth. Anthropic will block it; Google will permanently ban the user's account.
 
 ## Quick Start
 
-### 1. OpenAI Codex — Use Your ChatGPT Subscription
+### 1. AI Facade — Auto-detect (Recommended)
+
+```python
+from ai_sub_auth import AI
+
+# Auto-detects: existing OAuth token → env var API keys
+ai = AI()
+ai.connect()
+
+# Sync usage (simplest)
+result = ai.chat_sync("What is quantum computing?", system="Be concise.")
+print(result.content)
+
+# Check subscription status
+print(ai.status)  # SubscriptionStatus(connected=True, provider_name='OpenAI Codex', ...)
+```
+
+### 2. OpenAI Codex — Use Your ChatGPT Subscription
 
 ```python
 import asyncio
-from ai_sub_auth import LLMClient, oauth_login, PROVIDERS
+from ai_sub_auth import AI
 
-# First time: browser opens, you log in, done
-oauth_login(PROVIDERS["openai_codex"])
+ai = AI(provider="openai_codex")
+ai.connect()  # First time: browser opens for OAuth login. After: automatic.
 
-# Every time after: automatic
 async def main():
-    client = LLMClient(PROVIDERS["openai_codex"], model="openai-codex/gpt-5.1-codex")
-    resp = await client.chat("What is quantum computing?", system="Be concise.")
+    resp = await ai.chat("What is quantum computing?", system="Be concise.")
     print(resp.content)
 
 asyncio.run(main())
 ```
 
-### 2. Claude — API Key
+### 3. Claude — API Key
 
 ```python
-import asyncio
-from ai_sub_auth import LLMClient, PROVIDERS
+from ai_sub_auth import AI
 
-async def main():
-    client = LLMClient(PROVIDERS["anthropic"], api_key="sk-ant-...", model="claude-sonnet-4-5-20250514")
-    resp = await client.chat("Explain transformers in 3 sentences")
-    print(resp.content)
-    print(f"Tokens: {resp.usage}")
-
-asyncio.run(main())
+ai = AI(api_key="sk-ant-...")  # auto-detects Anthropic from key prefix
+result = ai.chat_sync("Explain transformers in 3 sentences")
+print(result.content)
+print(f"Tokens: {result.usage}")
 ```
 
-### 3. Google Gemini
+### 4. Google Gemini
 
 ```python
 import asyncio
@@ -115,7 +157,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### 4. OpenRouter — One Key, Every Model
+### 5. OpenRouter — One Key, Every Model
 
 ```python
 import asyncio
@@ -197,6 +239,7 @@ client = LLMClient(my_provider, api_key="...", model="my-model-v1")
 ```
 ai_sub_auth/
 ├── __init__.py       # Public API
+├── facade.py         # AI Facade — auto-detect, connect, chat (recommended entry point)
 ├── models.py         # OAuthToken, ProviderConfig, AuthMethod, LLMResponse
 ├── exceptions.py     # AuthError, TokenExpiredError, ProviderNotFoundError
 ├── providers.py      # Provider registry (Codex, Claude, Gemini, etc.)
