@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -56,12 +57,10 @@ class OAuthToken:
 
     @property
     def is_expired(self) -> bool:
-        import time
         return int(time.time() * 1000) >= self.expires
 
     @property
     def ttl_seconds(self) -> float:
-        import time
         return max(0, (self.expires - int(time.time() * 1000)) / 1000)
 
 

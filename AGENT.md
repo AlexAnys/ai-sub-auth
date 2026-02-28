@@ -9,15 +9,53 @@ A lightweight Python module (~500 LOC, only depends on `httpx`) that authenticat
 
 **3-line integration:**
 ```python
+# Recommended — auto-detects your subscription
+from ai_sub_auth import AI
+ai = AI()
+result = await ai.chat("your prompt here", system="your system prompt")
+
+# Or explicit provider selection
 from ai_sub_auth import LLMClient, PROVIDERS
 client = LLMClient(PROVIDERS["openai_codex"], model="openai-codex/gpt-4o")
 resp = await client.chat("your prompt here", system="your system prompt")
 ```
 
+## Subscription Reality (2026)
+
+Which AI subscriptions can be bridged into third-party apps:
+
+| Provider | Method | Status | Notes |
+|----------|--------|--------|-------|
+| **OpenAI ChatGPT Plus/Pro** | OAuth PKCE | ✅ Safe & encouraged | OpenAI actively supports via Codex SDK, MCP, Apps SDK |
+| **Claude** | API Key | ✅ Works (pay-per-token) | Anthropic banned subscription OAuth (Feb 2026). Use API key only |
+| **GitHub Copilot** | Device Code | ⚠️ Works but violates ToS | Not recommended for production |
+| **Google Gemini** | API Key | ✅ Works (pay-per-token) | Google banned subscription OAuth. Accounts permanently banned |
+| **DeepSeek, OpenRouter** | API Key | ✅ Works | Standard API key auth |
+
+**Key insight:** OpenAI Codex OAuth is the only path where users can reuse their existing subscription ($20/mo ChatGPT Plus) in third-party apps at zero additional cost. All other providers require pay-per-token API keys.
+
+### Provider Selection Guide
+
+When integrating AI into an app, help the user choose:
+
+1. **User has ChatGPT Plus/Pro** → Use OpenAI Codex OAuth (zero extra cost, best value)
+2. **User has Claude API key** → Use Anthropic API Key (high quality, pay-per-token)
+3. **User has both** → Default to OpenAI Codex (free with subscription), fall back to Claude
+4. **User has neither** → Guide them to get ChatGPT Plus ($20/mo) or a free-tier API key
+
+⚠️ **Anti-Patterns — Do NOT:**
+- Attempt to bridge Claude Pro/Max subscription via OAuth (Anthropic will block it)
+- Attempt to bridge Google Gemini subscription via OAuth (Google will permanently ban the account)
+- Hardcode provider-specific API calls in the target app (use ai-sub-auth's unified interface)
+- Store tokens outside the module's TokenStore (security risk)
+
+---
+
 ## Quick Reference
 
 | File | Purpose |
 |------|---------|
+| `ai_sub_auth/facade.py` | **AI Facade** — auto-detects subscription, recommended entry point |
 | `ai_sub_auth/providers.py` | Provider registry — add new providers here |
 | `ai_sub_auth/oauth_flow.py` | OAuth PKCE login + auto token refresh |
 | `ai_sub_auth/token_store.py` | Secure token storage (~/.ai-sub-auth/tokens/) |
@@ -166,6 +204,92 @@ async def summarize_notes(notes: list[str], max_points: int = 5) -> dict:
 # <button onClick={summarize}>✨ Summarize</button>
 ```
 
+### TRANSFORM Example: Adding translation to a messaging app
+
+```python
+# 1. AUTH — one-time setup
+from ai_sub_auth import LLMClient, PROVIDERS, oauth_login
+
+# Using ChatGPT subscription (zero cost for the user):
+# oauth_login(PROVIDERS["openai_codex"])  # first time only
+client = LLMClient(PROVIDERS["openai_codex"], model="openai-codex/gpt-4o")
+
+# 2. SERVICE — the AI function
+async def translate_message(text: str, source_lang: str, target_lang: str) -> dict:
+    resp = await client.chat(
+        message=text,
+        system=(
+            f"Translate the following from {source_lang} to {target_lang}. "
+            f"Preserve tone, formatting, and any embedded links. "
+            f'Output JSON: {{"translation": "...", "detected_lang": "...", "confidence": 0.0-1.0}}'
+        ),
+    )
+    import json
+    return json.loads(resp.content)
+
+# 3. ROUTE — hook into your messaging app's API
+from fastapi import APIRouter
+router = APIRouter()
+
+@router.post("/api/ai/translate")
+async def api_translate(request: dict):
+    result = await translate_message(
+        text=request["text"],
+        source_lang=request.get("source_lang", "auto"),
+        target_lang=request["target_lang"],
+    )
+    return result
+
+# 4. UI — add inline translate button on each message
+# <button onClick={() => translate(msg.id, userLang)}>🌐 Translate</button>
+# Shows translated text below original, with "Translated from {detected_lang}" label
+```
+
+### EXTRACT Example: Structured data extraction from documents
+
+```python
+# 1. AUTH — one-time setup
+from ai_sub_auth import LLMClient, PROVIDERS, oauth_login
+
+# Using ChatGPT subscription:
+# oauth_login(PROVIDERS["openai_codex"])  # first time only
+client = LLMClient(PROVIDERS["openai_codex"], model="openai-codex/gpt-4o")
+
+# Or using Claude API key for higher extraction accuracy:
+# client = LLMClient(PROVIDERS["anthropic"], api_key="sk-...", model="claude-sonnet-4-5-20250514")
+
+# 2. SERVICE — the AI function
+async def extract_invoice_data(raw_text: str) -> dict:
+    resp = await client.chat(
+        message=raw_text,
+        system=(
+            "Extract structured data from this invoice/receipt. "
+            "Output JSON: {"
+            '"vendor": "...", "date": "YYYY-MM-DD", "currency": "...", '
+            '"total": 0.00, "tax": 0.00, "subtotal": 0.00, '
+            '"line_items": [{"description": "...", "qty": 1, "unit_price": 0.00, "amount": 0.00}]'
+            "}"
+            " If a field is not found, use null."
+        ),
+    )
+    import json
+    return json.loads(resp.content)
+
+# 3. ROUTE — hook into your document management app's API
+from fastapi import APIRouter, UploadFile
+router = APIRouter()
+
+@router.post("/api/ai/extract-invoice")
+async def api_extract_invoice(file: UploadFile):
+    raw_text = (await file.read()).decode("utf-8")  # or use OCR for images
+    result = await extract_invoice_data(raw_text)
+    return result
+
+# 4. UI — add extract button on document upload
+# <button onClick={() => extractData(doc.id)}>📋 Extract Data</button>
+# Pre-fills form fields with extracted values; user reviews and confirms
+```
+
 ---
 
 ## Principles
@@ -176,3 +300,4 @@ async def summarize_notes(notes: list[str], max_points: int = 5) -> dict:
 4. **Quick-win plus high-ceiling.** Build trust with a fast win, then go deep.
 5. **Follow the host.** Mirror the target app's conventions for auth, routing, and UI. Be a guest, not an invader.
 6. **Auth is first, not last.** Every AI feature goes through ai-sub-auth from step 1.
+7. **Subscription-first.** Prefer OAuth subscription bridge (ChatGPT Plus) over API keys when available. It's zero extra cost for the user.

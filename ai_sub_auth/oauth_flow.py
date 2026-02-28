@@ -69,7 +69,9 @@ SUCCESS_HTML = (
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
+    server: _CallbackServer  # type: ignore[assignment]
+
+    def do_GET(self) -> None:
         url = urllib.parse.urlparse(self.path)
         if url.path != "/auth/callback":
             self.send_response(404)
@@ -95,12 +97,17 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, *_):
+    def log_message(self, format: str, /, *args: object) -> None:
         pass
 
 
 class _CallbackServer(HTTPServer):
-    def __init__(self, addr, state, on_code):
+    def __init__(
+        self,
+        addr: tuple[str, int],
+        state: str,
+        on_code: Callable[[str], None] | None,
+    ) -> None:
         super().__init__(addr, _CallbackHandler)
         self.expected_state = state
         self.on_code = on_code
@@ -137,6 +144,8 @@ async def _exchange_code(code: str, verifier: str, provider: ProviderConfig) -> 
         raise TokenExchangeError(f"Token exchange failed: {resp.status_code} {resp.text}")
 
     payload = resp.json()
+    if "error" in payload:
+        raise TokenExchangeError(f"Token exchange error: {payload['error']}")
     access = payload["access_token"]
     refresh = payload["refresh_token"]
     expires_in = payload["expires_in"]
@@ -165,6 +174,8 @@ def _refresh_token(refresh: str, provider: ProviderConfig) -> OAuthToken:
         raise TokenExpiredError(f"Token refresh failed: {resp.status_code} {resp.text}")
 
     payload = resp.json()
+    if "error" in payload:
+        raise TokenExchangeError(f"Token refresh error: {payload['error']}")
     access = payload["access_token"]
     new_refresh = payload["refresh_token"]
     expires_in = payload["expires_in"]

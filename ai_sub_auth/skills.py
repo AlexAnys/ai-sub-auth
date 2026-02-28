@@ -182,7 +182,9 @@ def suggest_for_app(profile: AppProfile, top_n: int = 3) -> list[Suggestion]:
     if "quick_win" not in efforts and len(diverse) >= top_n:
         for c in candidates:
             if c.effort == "quick_win" and c.skill.skill not in seen_skills:
+                seen_skills.discard(diverse[-1].skill.skill)
                 diverse[-1] = c
+                seen_skills.add(c.skill.skill)
                 break
 
     return diverse
